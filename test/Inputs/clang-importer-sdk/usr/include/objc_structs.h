@@ -8,10 +8,13 @@ struct StructOfBlocks {
   void (^__unsafe_unretained _Nonnull block)(void);
 };
 
-struct StrongsInAStruct { // expected-note {{record 'StrongsInAStruct' is not trivial to copy/destroy}}
-  __strong NSString *nsstr;
+@interface MYObject: NSObject
+@end
+
+struct StrongsInAStruct {
+  __strong MYObject *myobj;
 };
 
-struct WeaksInAStruct { // expected-note {{record 'WeaksInAStruct' is not trivial to copy/destroy}}
-  __weak NSString *nsstr;
+struct WeaksInAStruct {
+  __weak MYObject *myobj;
 };

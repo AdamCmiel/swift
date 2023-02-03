@@ -2044,25 +2044,6 @@ namespace {
       if (decl->isNonTrivialToPrimitiveCopy() ||
           decl->isNonTrivialToPrimitiveDestroy()) {
         isNonTrivialPtrAuth = isNonTrivialDueToAddressDiversifiedPtrAuth(decl);
-        if (!isNonTrivialPtrAuth) {
-          // Note that there is a third predicate related to these,
-          // isNonTrivialToPrimitiveDefaultInitialize. That one's not important
-          // for us because Swift never "trivially default-initializes" a struct
-          // (i.e. uses whatever bits were lying around as an initial value).
-
-          // FIXME: It would be nice to instead import the declaration but mark
-          // it as unavailable, but then it might get used as a type for an
-          // imported function and the developer would be able to use it without
-          // referencing the name, which would sidestep our availability
-          // diagnostics.
-          Impl.addImportDiagnostic(
-              decl,
-              Diagnostic(
-                  diag::record_non_trivial_copy_destroy,
-                  Impl.SwiftContext.AllocateCopy(decl->getNameAsString())),
-              decl->getLocation());
-          return nullptr;
-        }
       }
 
       // Import the name.
@@ -2948,6 +2929,21 @@ namespace {
       return false;
     }
 
+    static ImportTypeKind
+    importTypeKindForRecordFieldObjCLifetime(clang::Qualifiers::ObjCLifetime objCLifetime) {
+      switch (objCLifetime) {
+        case clang::Qualifiers::OCL_None:
+        case clang::Qualifiers::OCL_ExplicitNone:
+          return ImportTypeKind::RecordFieldWithReferenceSemantics;
+        case clang::Qualifiers::OCL_Strong:
+        case clang::Qualifiers::OCL_Weak:
+          return ImportTypeKind::RecordField;
+        // Fields cannot have autoreleasing membership
+        case clang::Qualifiers::OCL_Autoreleasing:
+          llvm_unreachable("invalid ObjC lifetime");
+      }
+    }
+
     Decl *VisitFunctionDecl(const clang::FunctionDecl *decl) {
       // Import the name of the function.
       ImportedName importedName;
@@ -3353,7 +3349,8 @@ namespace {
       }
 
       auto importedType =
-          Impl.importType(decl->getType(), ImportTypeKind::RecordField,
+          Impl.importType(decl->getType(),
+                          importTypeKindForRecordFieldObjCLifetime(decl->getType().getObjCLifetime()),
                           ImportDiagnosticAdder(Impl, decl, decl->getLocation()),
                           isInSystemModule(dc), Bridgeability::None,
                           getImportTypeAttrs(decl));

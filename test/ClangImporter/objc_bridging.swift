@@ -57,15 +57,20 @@ func mutablePointerToObjC(_ path: String) throws -> NSString {
 
 func objcStructs(_ s: StructOfNSStrings, sb: StructOfBlocks) {
   // Struct fields must not be bridged.
-  _ = s.nsstr! as Bool // expected-error {{cannot convert value of type 'Unmanaged<NSString>' to type 'Bool' in coercion}}
+  _ = s.nsstr! as Bool // expected-error {{cannot convert value of type 'NSString' to type 'Bool' in coercion}}
 
   // FIXME: Blocks should also be Unmanaged.
-  _ = sb.block as Bool // expected-error {{cannot convert value of type '@convention(block) () -> Void' to type 'Bool' in coercion}}
+  _ = sb.block as Bool // expected-error {{cannot convert value of type '() -> Void' to type 'Bool' in coercion}}
   sb.block() // okay
 
-  // Structs with non-trivial copy/destroy should not be imported
-  _ = WeaksInAStruct() // expected-error {{cannot find 'WeaksInAStruct' in scope}}
-  _ = StrongsInAStruct() // expected-error {{cannot find 'StrongsInAStruct' in scope}}
+  let anObject = MYObject()
+
+  // Structs with non-trivial copy/destroy should be imported
+  var aWeakInAStruct = WeaksInAStruct(myobj: .passUnretained(anObject))
+  var aStrongInAStruct = StrongsInAStruct(myobj: .passUnretained(anObject))
+
+  let _unused1: MYObject? = aWeakInAStruct.myobj.takeUnretainedValue()
+  let _unused2: MYObject? = aStrongInAStruct.myobj.takeUnretainedValue()
 }
 
 func test_repair_does_not_interfere_with_conversions() {
