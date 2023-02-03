@@ -1273,6 +1273,7 @@ static bool canBridgeTypes(ImportTypeKind importKind) {
   case ImportTypeKind::Enum:
   case ImportTypeKind::RecordField:
     return false;
+  case ImportTypeKind::RecordFieldWithReferenceSemantics:
   case ImportTypeKind::Result:
   case ImportTypeKind::AuditedResult:
   case ImportTypeKind::Parameter:
@@ -1300,6 +1301,7 @@ static bool isCFAudited(ImportTypeKind importKind) {
   case ImportTypeKind::Result:
   case ImportTypeKind::Enum:
   case ImportTypeKind::RecordField:
+  case ImportTypeKind::RecordFieldWithReferenceSemantics:
     return false;
   case ImportTypeKind::AuditedVariable:
   case ImportTypeKind::AuditedResult:
@@ -1469,8 +1471,7 @@ static ImportedType adjustTypeForConcreteImport(
     // bridge, do so.
     if (canBridgeTypes(importKind) &&
         importKind != ImportTypeKind::PropertyWithReferenceSemantics &&
-        !(importKind == ImportTypeKind::RecordField &&
-          objCLifetime <= clang::Qualifiers::OCL_ExplicitNone) &&
+        importKind != ImportTypeKind::RecordFieldWithReferenceSemantics &&
         !(importKind == ImportTypeKind::Typedef &&
           bridging == Bridgeability::None)) {
       // id and Any can be bridged without Foundation. There would be
@@ -1606,7 +1607,10 @@ static ImportedType adjustTypeForConcreteImport(
       case clang::Qualifiers::OCL_Strong:
         break;
       case clang::Qualifiers::OCL_Weak:
-        return {Type(), false};
+        if (importedType->isAnyClassReferenceType()) {
+          importedType = getUnmanagedType(impl, importedType);
+        }
+        break;
       case clang::Qualifiers::OCL_Autoreleasing:
         llvm_unreachable("invalid Objective-C lifetime");
     }

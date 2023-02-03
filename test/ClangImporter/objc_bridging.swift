@@ -57,15 +57,24 @@ func mutablePointerToObjC(_ path: String) throws -> NSString {
 
 func objcStructs(_ s: StructOfNSStrings, sb: StructOfBlocks) {
   // Struct fields must not be bridged.
-  _ = s.nsstr! as Bool // expected-error {{cannot convert value of type 'Unmanaged<NSString>' to type 'Bool' in coercion}}
-
+  _ = s.nsstr! as Bool // expected-error {{cannot convert value of type 'NSString' to type 'Bool' in coercion}}
+  
   // FIXME: Blocks should also be Unmanaged.
-  _ = sb.block as Bool // expected-error {{cannot convert value of type '@convention(block) () -> Void' to type 'Bool' in coercion}}
+  _ = sb.block as Bool // expected-error {{cannot convert value of type '() -> Void' to type 'Bool' in coercion}}
   sb.block() // okay
+}
 
-  // Structs with non-trivial copy/destroy should not be imported
-  _ = WeaksInAStruct() // expected-error {{cannot find 'WeaksInAStruct' in scope}}
-  _ = StrongsInAStruct() // expected-error {{cannot find 'StrongsInAStruct' in scope}}
+// Structs with non-trivial copy/destroy should be imported
+func objcStructsWithArcPointers(withWeaks weaks: WeaksInAStruct, strongs: StrongsInAStruct) -> StrongsInAStruct {
+ 
+  // Weak references should be bridged as Unmanaged pointers
+  let anObject = weaks.myobj?.takeUnretainedValue() ?? strongs.myobj
+  _ = WeaksInAStruct(myobj: .passUnretained(anObject))
+    
+  // Strong references should be retained by the struct's ctor
+  let aStrongInAStruct = StrongsInAStruct(myobj: anObject)
+
+  return aStrongInAStruct
 }
 
 func test_repair_does_not_interfere_with_conversions() {
