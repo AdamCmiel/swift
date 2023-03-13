@@ -209,6 +209,8 @@ ERROR(conforms_to_ambiguous,none,
 ERROR(conforms_to_not_protocol,none,
       "specified protocol conformance '%0' is not a protocol.", (StringRef))
 
+WARNING(record_field_weak_nonnull, none, "field %0 cannot import as both __weak and _Nonnull", (const clang::NamedDecl*))
+
 NOTE(unsupported_builtin_type, none, "built-in type '%0' not supported", (StringRef))
 NOTE(record_field_not_imported, none, "field %0 not imported", (const clang::NamedDecl*))
 NOTE(invoked_func_not_imported, none, "function %0 not imported", (const clang::NamedDecl*))

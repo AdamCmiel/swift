@@ -1601,15 +1601,9 @@ static ImportedType adjustTypeForConcreteImport(
           importedType = getUnmanagedType(impl, importedType);
         }
         break;
-      // FIXME: Eventually we might get C++-like support for strong pointers in
-      // structs, at which point we should really be checking the lifetime
-      // qualifiers.
+      // Strong pointers in structs has been implemented in LLVM, import these types directly
       case clang::Qualifiers::OCL_Strong:
-        break;
       case clang::Qualifiers::OCL_Weak:
-        if (importedType->isAnyClassReferenceType()) {
-          importedType = getUnmanagedType(impl, importedType);
-        }
         break;
       case clang::Qualifiers::OCL_Autoreleasing:
         llvm_unreachable("invalid Objective-C lifetime");

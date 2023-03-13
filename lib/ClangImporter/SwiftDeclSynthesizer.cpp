@@ -587,11 +587,15 @@ ConstructorDecl *SwiftDeclSynthesizer::createValueConstructor(
 
     bool generateParamName = wantCtorParamNames;
 
+    auto objcLifetime = clang::Qualifiers::OCL_None;
     if (var->hasClangNode()) {
       // TODO create value constructor with indirect fields instead of the
       // generated __Anonymous_field.
       if (isa<clang::IndirectFieldDecl>(var->getClangDecl()))
         continue;
+
+      if (auto clangVal = dyn_cast<clang::ValueDecl>(var->getClangDecl()))
+        objcLifetime = clangVal->getType().getObjCLifetime();
 
       if (auto clangField = dyn_cast<clang::FieldDecl>(var->getClangDecl()))
         if (clangField->isAnonymousStructOrUnion() ||
@@ -603,14 +607,21 @@ ConstructorDecl *SwiftDeclSynthesizer::createValueConstructor(
     auto param =
         new (context) ParamDecl(SourceLoc(), SourceLoc(), argName, SourceLoc(),
                                 var->getName(), structDecl);
+
+    // If struct field is a weak objc object pointer, wrap the interface type
+    // in an explicit optional
+    if (objcLifetime == clang::Qualifiers::OCL_Weak && !var->getInterfaceType()->isOptional()) {
+      param->setInterfaceType(var->getInterfaceType()->wrapInOptionalType());
+    } else {
+      param->setInterfaceType(var->getInterfaceType());
+    }
+
     param->setSpecifier(ParamSpecifier::Default);
-    param->setInterfaceType(var->getInterfaceType());
     ImporterImpl.recordImplicitUnwrapForDecl(
         param, var->isImplicitlyUnwrappedOptional());
 
     // Don't allow the parameter to accept temporary pointer conversions.
     param->setNonEphemeralIfPossible();
-
     valueParameters.push_back(param);
   }
 

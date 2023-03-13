@@ -3366,9 +3366,10 @@ namespace {
           return nullptr;
       }
 
+      auto objcLifetime = decl->getType().getObjCLifetime();
       auto importedType =
           Impl.importType(decl->getType(),
-                          importTypeKindForRecordFieldObjCLifetime(decl->getType().getObjCLifetime()),
+                          importTypeKindForRecordFieldObjCLifetime(objcLifetime),
                           ImportDiagnosticAdder(Impl, decl, decl->getLocation()),
                           isInSystemModule(dc), Bridgeability::None,
                           getImportTypeAttrs(decl));
@@ -3378,8 +3379,6 @@ namespace {
             decl->getSourceRange().getBegin());
         return nullptr;
       }
-
-      auto type = importedType.getType();
 
       auto result =
         Impl.createDeclWithClangNode<VarDecl>(decl, AccessLevel::Public,
@@ -3395,7 +3394,28 @@ namespace {
       }
       result->setIsObjC(false);
       result->setIsDynamic(false);
-      result->setInterfaceType(type);
+
+      // If struct field is a weak objc object pointer, create a weak storage type
+      // and add the appropriate wrapper to the param
+      if (objcLifetime == clang::Qualifiers::OCL_Weak) {
+        if (auto nullability =
+              decl->getType()->getNullability(Impl.getClangASTContext()))
+        {
+          if (*nullability == clang::NullabilityKind::NonNull) {
+            Impl.addImportDiagnostic(
+                decl, Diagnostic(diag::record_field_weak_nonnull, decl),
+                decl->getSourceRange().getBegin());
+            return nullptr;
+          }
+        }
+
+        auto typeToWrap = importedType.getType();
+        result->setInterfaceType(WeakStorageType::get(typeToWrap->isOptional() ? typeToWrap : typeToWrap->wrapInOptionalType(), Impl.SwiftContext));
+        result->getAttrs().add(new (Impl.SwiftContext) ReferenceOwnershipAttr(ReferenceOwnership::Weak));
+      } else {
+        result->setInterfaceType(importedType.getType());
+      }
+
       Impl.recordImplicitUnwrapForDecl(result,
                                        importedType.isImplicitlyUnwrapped());
 
