@@ -2340,6 +2340,11 @@ ERROR(pattern_type_not_usable_from_inline_frozen,none,
       "type referenced from a stored property in a '@frozen' struct must "
       "be '@usableFromInline' or public",
       (/*ignored*/bool, /*ignored*/bool))
+ERROR(pattern_type_not_usable_from_inline_implicit_frozen,none,
+      "type referenced from a stored property in a public struct must "
+      "be '@usableFromInline' or public when building "
+      "with '-non-resilient-hide-internal-dependencies'",
+      (/*ignored*/bool, /*ignored*/bool))
 ERROR(pattern_type_not_usable_from_inline_inferred,none,
       "type referenced from a '@usableFromInline' "
       "%select{%select{variable|constant}0|property}1 "
@@ -2355,6 +2360,11 @@ WARNING(pattern_type_not_usable_from_inline_inferred_warn,none,
 ERROR(pattern_type_not_usable_from_inline_inferred_frozen,none,
       "type referenced from a stored property with inferred type %2 in a "
       "'@frozen' struct must be '@usableFromInline' or public",
+      (/*ignored*/bool, /*ignored*/bool, Type))
+ERROR(pattern_type_not_usable_from_inline_inferred_implicit_frozen,none,
+      "type referenced from a stored property with inferred type %2 in a "
+      "public struct must be '@usableFromInline' or public when building "
+      "with '-non-resilient-hide-internal-dependencies'",
       (/*ignored*/bool, /*ignored*/bool, Type))
 
 ERROR(pattern_binds_no_variables,none,

@@ -10,7 +10,9 @@ extension NormalClass: @retroactive NormalProto {
   public typealias Assoc = Int
 }
 
-public struct BadStruct {}
+public struct BadStruct {
+  public init() {}
+}
 public protocol BadProto {}
 open class BadClass {}
 

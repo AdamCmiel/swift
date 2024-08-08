@@ -1387,8 +1387,8 @@ public:
   /// public/@usableFromInline types. In these cases, check the access against
   /// the struct instead of the VarDecl, and customize the diagnostics.
   static const ValueDecl *
-  getFixedLayoutStructContext(const VarDecl *VD) {
-    if (VD->isLayoutExposedToClients())
+  getFixedLayoutStructContext(const VarDecl *VD, bool inFrozenContext) {
+    if (VD->isLayoutExposedToClients(inFrozenContext))
       return dyn_cast<NominalTypeDecl>(VD->getDeclContext());
 
     return nullptr;
@@ -1399,7 +1399,9 @@ public:
                          bool isTypeContext,
                          const llvm::DenseSet<const VarDecl *> &seenVars) {
     const VarDecl *theVar = NP->getDecl();
-    auto *fixedLayoutStructContext = getFixedLayoutStructContext(theVar);
+    auto &Ctx = theVar->getASTContext();
+    const bool contextMustBeFrozenOrFixedLayout = Ctx.TypeCheckerOpts.DiagnoseEscapingImplementationOnlyProperties;
+    auto *fixedLayoutStructContext = getFixedLayoutStructContext(theVar, contextMustBeFrozenOrFixedLayout);
     if (!fixedLayoutStructContext && shouldSkipChecking(theVar))
       return;
     // Only check individual variables if we didn't check an enclosing
@@ -1414,10 +1416,13 @@ public:
         [&](AccessScope typeAccessScope, const TypeRepr *complainRepr,
             DowngradeToWarning downgradeToWarning,
             ImportAccessLevel importLimit) {
-          auto &Ctx = theVar->getASTContext();
           auto diagID = diag::pattern_type_not_usable_from_inline_inferred;
           if (fixedLayoutStructContext) {
-            diagID = diag::pattern_type_not_usable_from_inline_inferred_frozen;
+            if (contextMustBeFrozenOrFixedLayout) {
+              diagID = diag::pattern_type_not_usable_from_inline_inferred_implicit_frozen;
+            } else {
+              diagID = diag::pattern_type_not_usable_from_inline_inferred_frozen;
+            }
           } else if (!Ctx.isSwiftVersionAtLeast(5)) {
             diagID = diag::pattern_type_not_usable_from_inline_inferred_warn;
           }
@@ -1441,7 +1446,9 @@ public:
     });
     if (!anyVar)
       return;
-    auto *fixedLayoutStructContext = getFixedLayoutStructContext(anyVar);
+    auto &Ctx = anyVar->getASTContext();
+    const bool contextMustBeFrozenOrFixedLayout = Ctx.TypeCheckerOpts.DiagnoseEscapingImplementationOnlyProperties;
+    auto *fixedLayoutStructContext = getFixedLayoutStructContext(anyVar, contextMustBeFrozenOrFixedLayout);
     if (!fixedLayoutStructContext && shouldSkipChecking(anyVar))
       return;
 
@@ -1453,12 +1460,16 @@ public:
         [&](AccessScope typeAccessScope, const TypeRepr *complainRepr,
             DowngradeToWarning downgradeToWarning,
             ImportAccessLevel importLimit) {
-          auto &Ctx = anyVar->getASTContext();
           auto diagID = diag::pattern_type_not_usable_from_inline;
-          if (fixedLayoutStructContext)
-            diagID = diag::pattern_type_not_usable_from_inline_frozen;
-          else if (!Ctx.isSwiftVersionAtLeast(5))
+          if (fixedLayoutStructContext) {
+            if (contextMustBeFrozenOrFixedLayout) {
+              diagID = diag::pattern_type_not_usable_from_inline_implicit_frozen;
+            } else {
+              diagID = diag::pattern_type_not_usable_from_inline_frozen;
+            }
+          } else if (!Ctx.isSwiftVersionAtLeast(5)) {
             diagID = diag::pattern_type_not_usable_from_inline_warn;
+          }
           auto diag = Ctx.Diags.diagnose(TP->getLoc(), diagID, anyVar->isLet(),
                                          isTypeContext);
           highlightOffendingType(diag, complainRepr);
