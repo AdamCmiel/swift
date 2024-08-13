@@ -8,8 +8,7 @@
 // RUN:  -enable-library-evolution -swift-version 5
 
 import NormalLibrary
-@_implementationOnly import BADLibrary
-// expected-warning @-1 {{'@_implementationOnly' is deprecated, use 'internal import' instead}}
+@_implementationOnly import BADLibrary // expected-warning {{'@_implementationOnly' is deprecated, use 'internal import' instead}}
 
 public struct TestConformance: BadProto {} // expected-error {{cannot use protocol 'BadProto' in a public or '@usableFromInline' conformance; 'BADLibrary' has been imported as implementation-only}}
 
