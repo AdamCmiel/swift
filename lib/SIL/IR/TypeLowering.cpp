@@ -2867,6 +2867,15 @@ namespace {
         properties.setLexical(IsLexical);
       }
 
+      // Force address-only lowering: the hidden storage has no
+      // corresponding stored property for lowering to see.
+      if (D->hasOpaqueNontrivialStorage()) {
+        properties.setDefinitelyAddressableForDependencies();
+        properties.setAddressOnly();
+        properties.setNonTrivial();
+        properties.setLexical(IsLexical);
+      }
+
       if (auto *clangDecl = D->getClangDecl()) {
         if (auto *recordDecl = dyn_cast<clang::RecordDecl>(clangDecl)) {
           // C unions are imported as opaque types. Therefore we have to assume
