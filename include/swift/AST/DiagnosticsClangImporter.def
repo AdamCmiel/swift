@@ -438,6 +438,9 @@ NOTE(record_field_not_imported, none, "field %0 unavailable (cannot import)", (c
 NOTE(record_field_weak_nonnull, none,
      "field %0 cannot import as both __weak and _Nonnull",
      (const clang::NamedDecl*))
+NOTE(record_field_weak_array, none,
+     "field %0 is a fixed-size array of weak references, which has no Swift representation; the field is omitted but its storage is preserved",
+     (const clang::NamedDecl*))
 NOTE(invoked_func_not_imported, none, "function %0 unavailable (cannot import)", (const clang::NamedDecl*))
 NOTE(record_method_not_imported, none, "method %0 unavailable (cannot import)", (const clang::NamedDecl*))
 NOTE(objc_property_not_imported, none, "property %0 unavailable (cannot import)", (const clang::NamedDecl*))

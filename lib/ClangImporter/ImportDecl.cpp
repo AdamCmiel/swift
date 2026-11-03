@@ -938,6 +938,45 @@ static bool hasComputedPropertyAttr(const clang::Decl *decl) {
   return hasSwiftAttribute(decl, {"import_computed_property"});
 }
 
+/// Base element type of a fixed-size array, looking through nesting.
+/// Returns null unless every level is a constant array type.
+static clang::QualType getFixedArrayBaseElementType(clang::QualType type) {
+  clang::QualType current = type;
+  bool sawArray = false;
+  while (const auto *arrayType = current->getAsArrayTypeUnsafe()) {
+    if (!isa<clang::ConstantArrayType>(arrayType))
+      return clang::QualType();
+    sawArray = true;
+    current = arrayType->getElementType();
+  }
+  return sawArray ? current : clang::QualType();
+}
+
+/// True if \p type is a fixed-size array of directly __weak pointers.
+/// Such fields are omitted from the Swift interface (see VisitRecordDecl).
+static bool isWeakElementArrayType(clang::QualType type) {
+  clang::QualType base = getFixedArrayBaseElementType(type);
+  return !base.isNull() &&
+         base.getObjCLifetime() == clang::Qualifiers::OCL_Weak;
+}
+
+/// True if zero-initializing this storage would violate a _Nonnull
+/// invariant anywhere inside, looking through arrays and nested records.
+static bool hasNonnullStorage(clang::QualType type) {
+  if (auto nullability = type->getNullability())
+    return *nullability == clang::NullabilityKind::NonNull;
+  clang::QualType base = getFixedArrayBaseElementType(type);
+  if (!base.isNull())
+    return hasNonnullStorage(base);
+  if (const auto *record = type->getAsRecordDecl()) {
+    for (const auto *field : record->fields()) {
+      if (hasNonnullStorage(field->getType()))
+        return true;
+    }
+  }
+  return false;
+}
+
 /// Whether to import a member decl when importing its parent record.
 ///
 /// In theory this should just be isa<clang::FieldDecl>(decl), but currently
@@ -2483,6 +2522,8 @@ namespace {
 
       bool isNonTrivialPtrAuth = false;
       bool hasArcFields = false;
+      // E.g. a fixed-size array of weak references.
+      bool hasOpaqueNontrivialStorage = false;
       if (decl->isNonTrivialToPrimitiveCopy() ||
           decl->isNonTrivialToPrimitiveDestroy()) {
         auto cause = classifyNonTrivialRecord(decl, classifyNonTrivialRecord);
@@ -2735,11 +2776,17 @@ namespace {
         }
 
         if (auto field = dyn_cast<clang::FieldDecl>(nd)) {
-          // Non-nullable pointers can't be zero-initialized.
-          if (auto nullability =
-                  field->getType()->getNullability()) {
-            if (*nullability == clang::NullabilityKind::NonNull)
+          if (hasArcFields) {
+            // Storage containing a _Nonnull pointer can't be
+            // zero-initialized, even nested inside arrays or records.
+            if (hasNonnullStorage(field->getType()))
               hasZeroInitializableStorage = false;
+          } else {
+            // Non-nullable pointers can't be zero-initialized.
+            if (auto nullability = field->getType()->getNullability()) {
+              if (*nullability == clang::NullabilityKind::NonNull)
+                hasZeroInitializableStorage = false;
+            }
           }
           // TODO: If we had the notion of a closed enum with no private
           // cases or resilience concerns, then complete NS_ENUMs with
@@ -2759,6 +2806,41 @@ namespace {
         // See also: CXXMethodBridging
         if (nd->getDeclName().isIdentifier())
           allMemberNames.insert(nd->getName());
+
+        // A fixed-size array of __weak references has no Swift
+        // representation: weak is a storage modifier, not an element type.
+        // Omit the field but preserve its storage at the Clang layout,
+        // with address-only lowering and Clang-helper value witnesses.
+        clang::QualType memberType;
+        if (auto field = dyn_cast<clang::FieldDecl>(nd)) {
+          memberType = field->getType();
+        } else if (auto indirectField =
+                       dyn_cast<clang::IndirectFieldDecl>(nd)) {
+          // Members of anonymous structs and unions are injected as
+          // indirect fields; check the ultimate field type.
+          memberType = indirectField->getType();
+        }
+        if (!memberType.isNull() && isWeakElementArrayType(memberType)) {
+          // Weak + _Nonnull is unrepresentable, as with scalar fields.
+          // Reject the record.
+          if (auto nullability =
+                  getFixedArrayBaseElementType(memberType)->getNullability()) {
+            if (*nullability == clang::NullabilityKind::NonNull) {
+              Impl.addImportDiagnostic(
+                  nd, Diagnostic(diag::record_field_weak_nonnull, nd),
+                  nd->getSourceRange().getBegin());
+              eraseCacheOnBailOut();
+              return nullptr;
+            }
+          }
+          Impl.addImportDiagnostic(
+              nd, Diagnostic(diag::record_field_weak_array, nd),
+              nd->getSourceRange().getBegin());
+          hasUnreferenceableStorage = true;
+          hasMemberwiseInitializer = false;
+          hasOpaqueNontrivialStorage = true;
+          continue;
+        }
 
         if (!shouldEagerlyImportClangRecordMember(nd,
                                                   Impl.SwiftContext.LangOpts))
@@ -3033,6 +3115,9 @@ namespace {
 
       if (auto structResult = dyn_cast<StructDecl>(result)) {
         structResult->setHasUnreferenceableStorage(hasUnreferenceableStorage);
+        if (hasOpaqueNontrivialStorage) {
+          structResult->setHasOpaqueNontrivialStorage(true);
+        }
         if (isNonTrivialPtrAuth) {
           structResult->setHasNonTrivialPtrAuth(true);
         }
@@ -3627,6 +3712,13 @@ namespace {
     }
 
     Decl *VisitIndirectFieldDecl(const clang::IndirectFieldDecl *decl) {
+      // Weak arrays are never imported as properties (see VisitRecordDecl).
+      if (isWeakElementArrayType(decl->getType())) {
+        Impl.addImportDiagnostic(
+            decl, Diagnostic(diag::record_field_weak_array, decl),
+            decl->getSourceRange().getBegin());
+        return nullptr;
+      }
       ImportedName importedName;
       std::optional<ImportedName> correctSwiftName;
       std::tie(importedName, correctSwiftName) = importFullName(decl);
@@ -5040,6 +5132,13 @@ namespace {
               return nullptr;
           }
         }
+      }
+      // Weak arrays are never imported as properties (see VisitRecordDecl).
+      if (isWeakElementArrayType(decl->getType())) {
+        Impl.addImportDiagnostic(
+            decl, Diagnostic(diag::record_field_weak_array, decl),
+            decl->getSourceRange().getBegin());
+        return nullptr;
       }
       // Fields are imported as variables.
       std::optional<ImportedName> correctSwiftName;

@@ -753,7 +753,7 @@ protected:
     IsActor : 1
   );
 
-  SWIFT_INLINE_BITFIELD(StructDecl, NominalTypeDecl, 1+1+1,
+  SWIFT_INLINE_BITFIELD(StructDecl, NominalTypeDecl, 1+1+1+1,
     /// True if this struct has storage for fields that
     /// aren't accessible in Swift.
     HasUnreferenceableStorage : 1,
@@ -762,7 +762,10 @@ protected:
     IsCxxNonTrivial : 1,
     /// True if this struct is imported from C and has
     /// address diversified ptrauth qualified field.
-    IsNonTrivialPtrAuth : 1
+    IsNonTrivialPtrAuth : 1,
+    /// True if this C-imported struct has nontrivial storage with no
+    /// Swift representation (e.g. a fixed-size array of weak references).
+    HasOpaqueNontrivialStorage : 1
   );
 
   SWIFT_INLINE_BITFIELD(EnumDecl, NominalTypeDecl, 2+1+1,
@@ -5372,6 +5375,15 @@ public:
 
   void setHasNonTrivialPtrAuth(bool v) {
     Bits.StructDecl.IsNonTrivialPtrAuth = v;
+  }
+
+  /// Does this struct have nontrivial storage with no Swift representation?
+  bool hasOpaqueNontrivialStorage() const {
+    return Bits.StructDecl.HasOpaqueNontrivialStorage;
+  }
+
+  void setHasOpaqueNontrivialStorage(bool v) {
+    Bits.StructDecl.HasOpaqueNontrivialStorage = v;
   }
 
   Type getTemplateInstantiationType() const { return TemplateInstantiationType; }

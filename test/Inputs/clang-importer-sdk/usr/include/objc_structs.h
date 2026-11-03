@@ -94,3 +94,42 @@ union UnionWithStrong {
 struct StructWithArcUnion {
   union UnionWithStrong u;
 };
+
+// Struct with a fixed-size array of weak references. The array field has no
+// Swift representation, so it is omitted while its storage is preserved
+// opaquely. The struct keeps its other fields and remains address-only.
+struct WeakArrayArc {
+  int tag;
+  __weak MYObject *_Nullable values[2];
+};
+
+// Struct combining a fixed-size array of weak references with a fixed-size
+// array of strong references. Both arrays are handled by the Clang-synthesized
+// value witnesses of the address-only record.
+struct WeakStrongArraysArc {
+  __strong MYObject *_Nonnull strongs[2];
+  __weak MYObject *_Nullable weaks[2];
+};
+
+// Struct with a fixed-size array of weak + _Nonnull elements. Like a scalar
+// weak + _Nonnull field, this cannot be represented and rejects the record.
+struct WeakArrayNonnullArc {
+  __weak MYObject *_Nonnull values[2];
+};
+
+// Struct nesting a record with an opaque weak array.
+struct OuterWithWeakArrayInner {
+  struct WeakArrayArc nested;
+  int other;
+};
+
+// Struct with an anonymous struct member containing a weak array. The array
+// is omitted, even though it is injected as an indirect field, while its
+// storage is preserved opaquely.
+struct AnonWeakArrayHolder {
+  struct {
+    __weak MYObject *_Nullable hidden[2];
+    int tag;
+  };
+  int y;
+};
