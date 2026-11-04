@@ -1698,7 +1698,11 @@ public:
             ? IsNotCopyable : IsCopyable,
           ClangDecl);
     }
-    if (hasWeakField) {
+    // Hidden nontrivial storage delegates to the Clang helpers, which
+    // manage the weak slots by address.
+    if (hasWeakField ||
+        SwiftType.getStructOrBoundGenericStruct()
+            ->hasOpaqueNontrivialStorage()) {
       return AddressOnlyArcClangRecordTypeInfo::create(
           FieldInfos, llvmType, TotalStride, TotalAlignment,
           (SwiftDecl && !SwiftDecl->canBeCopyable())
