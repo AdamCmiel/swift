@@ -57,7 +57,38 @@ func exerciseMixedGeneric() {
   _ = copy
 }
 
+// Weak-array struct through generic context. The zero initializer covers
+// the hidden weak slots, and the VWT copy delegates to Clang.
+// CHECK-LABEL: define hidden swiftcc void @"$s{{.*}}24exerciseWeakArrayGenericyyF"
+// CHECK: call swiftcc void @"$s{{.*}}11genericCopyyxxlF"
+func exerciseWeakArrayGeneric() {
+  let s = WeakArrayArc()
+  let copy = genericCopy(s)
+  _ = copy
+}
+
 // --- Value witness function bodies ---
+
+// Weak-array destroy uses the Clang-synthesized destructor, whose name
+// encodes the hidden array.
+// CHECK-LABEL: define linkonce_odr hidden void @"$sSo12WeakArrayArcVwxx"
+// CHECK: call void @__destructor_8_{{.*}}AB8s8n2_w8_AE
+// CHECK: ret void
+
+// Weak-array initializeWithCopy: Clang copy constructor.
+// CHECK-LABEL: define linkonce_odr hidden ptr @"$sSo12WeakArrayArcVwcp"
+// CHECK: call void @__copy_constructor_8_8_{{.*}}AB8s8n2_w8_AE
+// CHECK: ret ptr
+
+// Weak-array assignWithCopy: Clang copy assignment.
+// CHECK-LABEL: define linkonce_odr hidden ptr @"$sSo12WeakArrayArcVwca"
+// CHECK: call void @__copy_assignment_8_8_{{.*}}AB8s8n2_w8_AE
+// CHECK: ret ptr
+
+// Weak-array assignWithTake: Clang move assignment.
+// CHECK-LABEL: define linkonce_odr hidden ptr @"$sSo12WeakArrayArcVwta"
+// CHECK: call void @__move_assignment_8_8_{{.*}}AB8s8n2_w8_AE
+// CHECK: ret ptr
 
 // Mixed destroy: calls Clang-synthesized destructor.
 // CHECK-LABEL: define linkonce_odr hidden void @"$sSo18MixedStrongWeakArcVwxx"

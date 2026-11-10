@@ -36,3 +36,33 @@ func testCopyWeak(_ s: WeaksInAStructArc) -> WeaksInAStructArc {
 func testWeakFieldAccess(_ s: WeaksInAStructArc) -> MYObject? {
   return s.myobj
 }
+
+// A record with an opaque weak array is address-only: @out return,
+// copy_addr for copies, destroy_addr for destruction.
+
+// CHECK-LABEL: sil hidden [ossa] @$s{{.*}}testCreateWeakArray
+// CHECK: apply {{%[0-9]+}}({{%[0-9]+}}, {{%[0-9]+}}) :
+// CHECK-SAME: -> @out WeakArrayArc
+// CHECK: destroy_addr
+// CHECK: } // end sil function
+func testCreateWeakArray() {
+  var s = WeakArrayArc()
+  _ = s
+}
+
+// CHECK-LABEL: sil hidden [ossa] @$s{{.*}}testCopyWeakArray
+// CHECK: bb0(%0 : $*WeakArrayArc, %1 : $*WeakArrayArc):
+// CHECK: copy_addr %1 to [init] %0
+// CHECK: } // end sil function
+func testCopyWeakArray(_ s: WeakArrayArc) -> WeakArrayArc {
+  return s
+}
+
+// Visible fields of a record with an opaque weak array are accessed by
+// address. The omitted array field has no projection.
+// CHECK-LABEL: sil hidden [ossa] @$s{{.*}}testWeakArrayFieldAccess
+// CHECK: struct_element_addr %0, #WeakArrayArc.tag
+// CHECK: } // end sil function
+func testWeakArrayFieldAccess(_ s: WeakArrayArc) -> Int32 {
+  return s.tag
+}

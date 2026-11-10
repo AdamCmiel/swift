@@ -1698,7 +1698,9 @@ public:
             ? IsNotCopyable : IsCopyable,
           ClangDecl);
     }
-    if (hasWeakField) {
+    if (hasWeakField ||
+        SwiftType.getStructOrBoundGenericStruct()
+            ->hasOpaqueNontrivialStorage()) {
       return AddressOnlyArcClangRecordTypeInfo::create(
           FieldInfos, llvmType, TotalStride, TotalAlignment,
           (SwiftDecl && !SwiftDecl->canBeCopyable())

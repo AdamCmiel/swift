@@ -125,8 +125,10 @@ func passMixedStructToCFunction() {
 }
 
 // Nested structs with strong ARC fields should be imported.
+// A nested _Nonnull strong field suppresses the zero initializer, since
+// zeroing the outer struct would violate the inner non-null invariant.
 // CHECK-IDE-TEST: struct OuterArcStruct {
-// CHECK-IDE-TEST:   init()
+// CHECK-IDE-TEST-NOT: init()
 // CHECK-IDE-TEST:   init(nested: InnerArcStruct, tag: CInt)
 // CHECK-IDE-TEST:   var nested: InnerArcStruct
 // CHECK-IDE-TEST:   var tag: CInt
@@ -162,3 +164,56 @@ func unionWithStrongIsRejected() {
 func structWithArcUnionIsRejected() {
   _ = StructWithArcUnion() // expected-error {{cannot find 'StructWithArcUnion' in scope}}
 }
+
+// A fixed-size array of weak references has no Swift representation: the
+// field is omitted while its storage is preserved opaquely. The struct
+// keeps its other fields and its zero initializer, but has no memberwise
+// initializer since not every field is referenceable.
+// CHECK-IDE-TEST: struct WeakArrayArc {
+// CHECK-IDE-TEST:   init()
+// CHECK-IDE-TEST-NOT: init(tag:
+// CHECK-IDE-TEST:   var tag: CInt
+// CHECK-IDE-TEST: }
+
+func weakArrayFieldAccess(_ s: WeakArrayArc) -> Int32 {
+  return s.tag
+}
+
+func weakArrayOmitsArrayField(_ s: WeakArrayArc) {
+  _ = s.values // expected-error {{value of type 'WeakArrayArc' has no member 'values'}}
+}
+
+// A struct combining weak and strong fixed-size arrays. The strong array
+// imports as a tuple; the weak array is omitted. The _Nonnull strong
+// elements suppress the zero initializer.
+// CHECK-IDE-TEST: struct WeakStrongArraysArc {
+// CHECK-IDE-TEST-NOT: init(
+// CHECK-IDE-TEST:   var strongs: (MYObject, MYObject)
+// CHECK-IDE-TEST: }
+
+// A fixed-size array of weak + _Nonnull elements cannot be represented,
+// like a scalar weak + _Nonnull field, so the record is rejected.
+// CHECK-IDE-TEST-NOT: struct WeakArrayNonnullArc
+
+func weakArrayNonnullIsRejected() {
+  _ = WeakArrayNonnullArc() // expected-error {{cannot find 'WeakArrayNonnullArc' in scope}}
+}
+
+// A struct nesting a record with an opaque weak array imports normally;
+// the nested record carries the weak ownership.
+// CHECK-IDE-TEST: struct OuterWithWeakArrayInner {
+// CHECK-IDE-TEST:   init()
+// CHECK-IDE-TEST:   init(nested: WeakArrayArc, other: CInt)
+// CHECK-IDE-TEST:   var nested: WeakArrayArc
+// CHECK-IDE-TEST:   var other: CInt
+// CHECK-IDE-TEST: }
+
+func outerWithWeakArrayInnerConstruction() -> OuterWithWeakArrayInner {
+  return OuterWithWeakArrayInner(nested: WeakArrayArc(), other: 1)
+}
+
+// A weak array inside an anonymous struct member is omitted like a direct
+// field, while the rest of the record still imports.
+// CHECK-IDE-TEST: struct AnonWeakArrayHolder {
+// CHECK-IDE-TEST:   init()
+// CHECK-IDE-TEST: }
